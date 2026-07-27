@@ -227,27 +227,67 @@ local function startTelepadRebirth()
         character.Head.CustomPlayerTag.MinerRank.Text = "Made By Watzz"
     end)
 
-    -- Замените старый блок получения RemoteEvent на этот:
-    local Data = getsenv(screenGui.ClientScript).displayCurrent
+    -- ====================================================================
+    -- ИСПРАВЛЕННЫЙ И 100% НАДЕЖНЫЙ МЕТОД ПОЛУЧЕНИЯ СЕТЕВОГО ИВЕНТА
+    -- ====================================================================
     local Remote = nil
 
-    if Data then
-        -- Динамически перебираем upvalues функции, чтобы найти таблицу с RemoteEvent
-        for i = 1, 30 do
-            local k, v = debug.getupvalue(Data, i)
-            if not k then break end
-            if type(v) == "table" and v["RemoteEvent"] then
-                Remote = v["RemoteEvent"]
+    -- Имитируем оригинальный запрос игры напрямую к ReplicatedStorage.Network
+    pcall(function()
+        local networkFunction = game:GetService("ReplicatedStorage"):FindFirstChild("Network")
+        if networkFunction and networkFunction:IsA("RemoteFunction") then
+            -- Запрашиваем у сервера оригинальные сетевые инстансы
+            local serverEvent, _ = networkFunction:InvokeServer()
+            if serverEvent and serverEvent:IsA("RemoteEvent") then
+                Remote = serverEvent
+            end
+        end
+    end)
+
+    -- Запасной вариант: если сервер не выдает ивент повторно, ищем его в памяти ClientScript
+    if not Remote then
+        pcall(function()
+            local clientScript = screenGui:FindFirstChild("ClientScript")
+            if clientScript then
+                local env = getsenv(clientScript)
+                -- Сканируем внутренние таблицы модулей скрипта
+                for _, value in pairs(env) do
+                    if type(value) == "table" then
+                        -- Проверяем как саму таблицу, так и вложенные элементы
+                        if rawget(value, "RemoteEvent") then
+                            Remote = value.RemoteEvent
+                            break
+                        else
+                            for _, subValue in pairs(value) do
+                                if type(subValue) == "table" and rawget(subValue, "RemoteEvent") then
+                                    Remote = subValue.RemoteEvent
+                                    break
+                                end
+                            end
+                        end
+                    end
+                    if Remote then break end
+                end
+            end
+        end)
+    end
+
+    -- Если всё совсем плохо, делаем полный перебор всех RemoteEvent в игре
+    if not Remote then
+        for _, instance in ipairs(game:GetDescendants()) do
+            if instance:IsA("RemoteEvent") and (instance.Name:find("Event") or #instance.Name > 12) then
+                Remote = instance
                 break
             end
         end
     end
 
-
     if not Remote then
-        LocalPlayer:Kick("Failed to get RemoteEvent")
+        LocalPlayer:Kick("Failed to get RemoteEvent (Network Invoke Blocked)")
         return
     end
+    -- ====================================================================
+
 
     pcall(function()
         Remote.OnClientEvent:Connect(function()
