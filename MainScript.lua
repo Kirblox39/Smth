@@ -227,10 +227,22 @@ local function startTelepadRebirth()
         character.Head.CustomPlayerTag.MinerRank.Text = "Made By Watzz"
     end)
 
+    -- Замените старый блок получения RemoteEvent на этот:
     local Data = getsenv(screenGui.ClientScript).displayCurrent
-    local Values = getupvalue(Data, 8)
-    local Remote = Values["RemoteEvent"]
-    Data, Values = nil
+    local Remote = nil
+
+    if Data then
+        -- Динамически перебираем upvalues функции, чтобы найти таблицу с RemoteEvent
+        for i = 1, 30 do
+            local k, v = debug.getupvalue(Data, i)
+            if not k then break end
+            if type(v) == "table" and v["RemoteEvent"] then
+                Remote = v["RemoteEvent"]
+                break
+            end
+        end
+    end
+
 
     if not Remote then
         LocalPlayer:Kick("Failed to get RemoteEvent")
